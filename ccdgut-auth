@@ -1,0 +1,47 @@
+#!/bin/bash
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+function log() {
+    logger -t ccdgut-auth ${1} 2>/dev/null
+    echo ${1}
+}
+
+username=${1}
+password=${2}
+
+PIDFILE="/tmp/ccdgut-auth.pid"
+
+oldPid=$(cat ${PIDFILE})
+
+if cat /proc/${oldPid}/cmdline 2>/dev/null | grep "ccdgut-auth" >/dev/null;then
+    log "Stop old process: ${oldPid}"
+    kill -9 ${oldPid}
+fi
+
+echo ${$} > ${PIDFILE}
+
+while true; do
+    sleepTime=30
+
+    content=$(curl --connect-timeout 10 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36' http://10.20.208.198)
+    if [ "${?}" == "0" ] && ! echo ${content} | grep "uid=" > /dev/null 2>&1;then
+        curl 'http://10.20.208.198/a70.htm' \
+            --connect-timeout 10 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36' \
+            -H 'Referer: http://10.20.208.198/a70.htm' \
+            --data 'DDDDD='${username}'&upass='${password}'&R1=0&R2=&R3=0&R6=0&para=00&0MKKey=123456&buttonClicked=&redirect_url=&err_flag=&username=&password=&user=&cmd=&Login=&v6ip=' | grep "errorMsgObj.DispTFM();" > /dev/null
+
+        if [ "${?}" != "0" ];then
+            # Send signal to zte-client, so as to do China Telecom web authentication
+            # killall -USR1 zte-client
+            log "Login successfully"
+        else
+            sleepTime=3
+            log "Login failed"
+        fi
+    else
+        log "Already logined"
+    fi
+
+    sleep ${sleepTime}
+done
